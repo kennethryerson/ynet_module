@@ -1,0 +1,9 @@
+Format: http://www.debian.org/doc/packaging-manuals/copyright-format/1.0/
+Upstream-Name: ynet
+Upstream-Contact: Kenneth Ryerson <kryerson@vermeer.com>
+
+Files: *
+Copyright: 2014, Vermeer Underground Technologies, Inc
+License: GPL-3+
+ /usr/share/common-licenses/GPL-3
+

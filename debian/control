@@ -1,0 +1,14 @@
+Source: ynet
+Maintainer: Kenneth Ryerson <kryerson@vermeer.com>
+Section: net
+Priority: optional
+Standards-Version: 3.9.2
+Build-Depends: devscripts,dkms
+
+Package: ynet
+Architecture: any
+Depends: ${shlibs:Depends}, ${misc:Depends}
+Description: Y-net protocol driver module
+ Kernel module which implements the Y-net protocol
+ for Yitran power line communications devices.
+

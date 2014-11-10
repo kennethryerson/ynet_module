@@ -1,0 +1,9 @@
+#!/bin/sh
+
+MODNAME=ynet
+MODVER=0.1.0
+
+set -e
+
+dkms build -m $MODNAME -v $MODVER && dkms install -m $MODNAME -v $MODVER || true
+

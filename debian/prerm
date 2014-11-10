@@ -1,0 +1,9 @@
+#!/bin/sh
+
+MODNAME=ynet
+MODVER=0.1.0
+
+set -e
+
+dkms remove -m $MODNAME -v $MODVER --all || true
+
