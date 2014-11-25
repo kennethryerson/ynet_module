@@ -9,7 +9,8 @@
 #define _LINUX_YNET_H
 
 /* Y-net configuration. */
-#define YN_MTU		296		/* TODO: what is an appropriate MTU? */
+#define YN_MTU		1400
+#define YNET_DATA_LEN	1472
 
 /* Y-net protocol characters. */
 #define YNET_ATTENTION	0xCA

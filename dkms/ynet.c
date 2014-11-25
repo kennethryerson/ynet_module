@@ -39,7 +39,7 @@
 #include <net/slhc_vj.h>
 #endif
 
-#define YNET_VERSION	"0.1.0"
+#define YNET_VERSION	"0.2.0"
 #define N_YNET 25
 
 static struct net_device *ynet_dev;
@@ -143,7 +143,7 @@ static int yn_realloc_bufs(struct ynet *yn, int mtu)
 {
 	int err = 0;
 	struct net_device *dev = yn->dev;
-	unsigned char *xbuff, *rbuff;
+	unsigned char *xbuff, *rbuff, *rspbuff;
 	int len = mtu * 2;
 
 /*
@@ -158,8 +158,9 @@ static int yn_realloc_bufs(struct ynet *yn, int mtu)
 
 	xbuff = kmalloc(len + 4, GFP_ATOMIC);
 	rbuff = kmalloc(len + 4, GFP_ATOMIC);
+	rspbuff = kmalloc(len + 4, GFP_ATOMIC);
 
-	if(xbuff == NULL || rbuff == NULL)
+	if(xbuff == NULL || rbuff == NULL || rspbuff == NULL)
 	{
 		if(mtu >= yn->mtu)
 		{
@@ -179,6 +180,7 @@ static int yn_realloc_bufs(struct ynet *yn, int mtu)
 
 	xbuff    = xchg(&yn->xbuff, xbuff);
 	rbuff    = xchg(&yn->rbuff, rbuff);
+	rspbuff  = xchg(&yn->rspbuff, rspbuff);
 	if(yn->xleft)
 	{
 		if(yn->xleft <= len)
@@ -206,6 +208,20 @@ static int yn_realloc_bufs(struct ynet *yn, int mtu)
 			set_bit(YNF_ERROR, &yn->flags);
 		}
 	}
+	
+	if(yn->rspcount)
+	{
+		if(yn->rspcount <= len)
+		{
+			memcpy(yn->rspbuff, rspbuff, yn->rspcount);
+		}
+		else
+		{
+			yn->rspcount = 0;
+			
+		}
+	}
+	
 	yn->mtu      = mtu;
 	dev->mtu      = mtu;
 	yn->buffsize = len;
@@ -217,6 +233,7 @@ done_on_bh:
 done:
 	kfree(xbuff);
 	kfree(rbuff);
+	kfree(rspbuff);
 	return err;
 }
 
@@ -349,6 +366,8 @@ static void yn_handle_response(struct ynet *yn)
 	unsigned char status, resp_num, result;
 	
 	count = yn->rspcount;
+	
+	printk(KERN_WARNING "Y-net response: opcode=%02X, type=%02X, payload=%02X%02X%02X\n",yn->rxopcode,yn->rxtype,payload[0],payload[1],payload[2]);
 	
 	/* repsonse status */
 	status = payload[0];
@@ -568,7 +587,7 @@ static int yn_change_mtu(struct net_device *dev, int new_mtu)
 {
 	struct ynet *yn = netdev_priv(dev);
 
-	if(new_mtu < 68 || new_mtu > 65534)
+	if(new_mtu < 68 || new_mtu > YNET_DATA_LEN)
 	{
 		return -EINVAL;
 	}
@@ -672,11 +691,9 @@ static void ynet_receive_buf(struct tty_struct *tty, const unsigned char *cp,
 							char *fp, int count)
 {
 	struct ynet *yn = tty->disc_data;
-
+	
 	if(!yn || yn->magic != YNET_MAGIC || !netif_running(yn->dev))
-	{
 		return;
-	}
 
 	/* Read the characters out of the buffer */
 	while(count--)
@@ -1036,16 +1053,19 @@ static void ynet_unesc(struct ynet *yn, unsigned char s)
 	case YNS_LENH:
 		yn->rxlength += ((unsigned short)s << 8);
 		yn->rxstate = YNS_TYPE;
+		yn->plidx = 0;
 		yn->checksum += s;
 		break;
 	case YNS_TYPE:
 		yn->rxtype = s;
 		yn->rxstate = YNS_OPCODE;
+		yn->plidx++;
 		yn->checksum += s;
 		break;
 	case YNS_OPCODE:
 		yn->rxopcode = s;
 		yn->rxstate = YNS_PAYLOAD;
+		yn->plidx++;
 		yn->checksum += s;
 		break;
 	case YNS_PAYLOAD:

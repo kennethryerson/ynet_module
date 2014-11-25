@@ -1,3 +1,10 @@
+ynet (0.2.0) UNRELEASED; urgency=medium
+
+  * Added handling for response buffer
+  * Fixed parsing of incoming packets
+
+ -- Kenneth Ryerson <kryreson@vermeer.com>  Tue, 25 Nov 2014 07:51:28 -0600
+
 ynet (0.1.0) UNRELEASED; urgency=medium
 
   * Initial release.
