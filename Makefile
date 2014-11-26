@@ -15,9 +15,12 @@ EXTRACT  = tar xf
 INSTALL  = install -D
 
 .PHONY : default
-default: ynattach
+default: ynattach plcid
 
 ynattach: ynattach.c
+	$(CC) -o $@ $^
+
+plcid: plcid.c
 	$(CC) -o $@ $^
 	
 .PHONY : install
@@ -25,6 +28,7 @@ install:
 	$(INSTALL) -d $(DESTDIR)/usr/src/$(MODULE)-$(MODVER)
 	$(INSTALL) -m644 dkms/* $(DESTDIR)/usr/src/$(MODULE)-$(MODVER)/
 	$(INSTALL) -m755 ynattach $(DESTDIR)/sbin/ynattach
+	$(INSTALL) -m755 plcid $(DESTDIR)/usr/bin/plcid
 
 .PHONY : dist
 dist: $(DIST)
@@ -42,10 +46,10 @@ pkg:
 	
 .PHONY : clean
 clean:
-	$(RM) $(DIST) *.build *.changes *.deb ynattach
+	$(RM) $(DIST) *.build *.changes *.deb ynattach plcid
 	$(RMDIR) $(MODULE)-$(MODVER)
 
-$(MODULE)-$(MODVER): dkms Makefile ynattach.c debian
+$(MODULE)-$(MODVER): dkms Makefile ynattach.c plcid.c debian
 	$(MKDIR) $@
 	$(RMDIR) $@/*
 	$(CP) $^ $@/

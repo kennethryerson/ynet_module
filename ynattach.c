@@ -220,28 +220,23 @@ int main(int argc, char **argv)
 {
 	int i, c, opt;
 	struct termios state;
-	const char *extcmd;   /* Command to execute after hangup */
 	const char *baud_str;
 	int baud_code = -1;   /* Line baud rate (system code) */
+    pid_t pid, sid;
 
 	enum {
-		OPT_s_baud   = 1 << 0,
-		OPT_c_extcmd = 1 << 1
+		OPT_s_baud   = 1 << 0
 	};
 
 	/* Parse command line options */
 	opt = 0;
-	while((c = getopt(argc, argv, "s:c:")) != -1)
+	while((c = getopt(argc, argv, "s:")) != -1)
 	{
 		switch(c)
 		{
 		case 's':
 			opt |= OPT_s_baud;
 			baud_str = optarg;
-			break;
-		case 'c':
-			opt |= OPT_c_extcmd;
-			extcmd = optarg;
 			break;
 		default:
 			break;
@@ -317,6 +312,26 @@ int main(int argc, char **argv)
 	}
 
 	set_state(&state);
+
+    /* daemonize */
+    pid = fork();
+
+    if(pid < 0)
+    {
+        return 1;
+    }
+    if(pid > 0)
+    {
+        return 0;
+    }
+
+    umask(0);
+
+    sid = setsid();
+    if(sid < 0)
+    {
+        return 1;
+    }
 
 	/* Watch line for hangup */
 	while(ioctl(handle, TIOCMGET, &i) >= 0 && !(i & TIOCM_CAR))
