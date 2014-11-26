@@ -39,7 +39,7 @@
 #include <net/slhc_vj.h>
 #endif
 
-#define YNET_VERSION	"0.2.0"
+#define YNET_VERSION	"0.3.0"
 #define N_YNET 25
 
 static struct net_device *ynet_dev;
@@ -367,26 +367,54 @@ static void yn_handle_response(struct ynet *yn)
 	
 	count = yn->rspcount;
 	
-	printk(KERN_WARNING "Y-net response: opcode=%02X, type=%02X, payload=%02X%02X%02X\n",yn->rxopcode,yn->rxtype,payload[0],payload[1],payload[2]);
-	
-	/* repsonse status */
-	status = payload[0];
-	
-	if(yn->rxopcode == YNET_OPCODE_TX_PACKET)
+	/* check repsonse status */
+	if(payload[0] != YNET_RESPONSE_STATUS_SUCCESS)
 	{
-		/* response number */
-		resp_num = payload[1];
-		
-		/* result */
-		result = payload[2];
-		
-		if(resp_num == 1 && result == YNET_RESPONSE_DATA_RESULT1_ACCEPTED)
+		printk(KERN_ERR "Y-net command failed: opcode=%02X\n",yn->rxopcode);
+	}
+	
+	/* check TX response */
+	if((yn->rxopcode == YNET_OPCODE_TX_PACKET) && payload[2])
+	{	
+		if(payload[1] == 1)
 		{
-			/* TODO: how to handle accepted packet? */
+			switch(payload[2])
+			{
+			case YNET_RESPONSE_DATA_RESULT1_NO_MEMORY:
+				printk(KERN_ERR "Y-net TX packet rejected: no memory\n");
+				break;
+			case YNET_RESPONSE_DATA_RESULT1_FATAL_ERROR:
+				printk(KERN_ERR "Y-net TX packet rejected: fatal error\n");
+				break;
+			case YNET_RESPONSE_DATA_RESULT1_UNKNOWN_NODE:
+				printk(KERN_ERR "Y-net TX packet rejected: unknown node ID\n");
+				break;
+			default:
+				printk(KERN_ERR "Y-net TX packet rejected: unknown error\n");
+				break;
+			}
 		}
-		else if(resp_num == 3 && result == YNET_RESPONSE_DATA_RESULT2_SUCCESS)
+		else if(payload[1] == 3)
 		{
-			/* TODO: how to handle transmitted packet? */
+			switch(payload[2])
+			{
+			case YNET_RESPONSE_DATA_RESULT2_NA:
+				printk(KERN_WARNING "Y-net TX failed: N/A\n");
+				break;
+			case YNET_RESPONSE_DATA_RESULT2_NACK:
+				printk(KERN_WARNING "Y-net TX failed: NACK\n");
+				break;
+			case YNET_RESPONSE_DATA_RESULT2_NO_RESOURCES:
+				printk(KERN_WARNING "Y-net TX failed: no resources (target)\n");
+				break;
+			case YNET_RESPONSE_DATA_RESULT2_BLOCKED:
+				printk(KERN_WARNING "Y-net TX failed: blocked\n");
+				break;
+			case YNET_RESPONSE_DATA_RESULT2_UNKNOWN_ERROR:
+			default:
+				printk(KERN_WARNING "Y-net TX failed: unknown error\n");
+				break;
+			}
 		}
 	}
 	
@@ -1142,7 +1170,7 @@ static void ynet_unesc(struct ynet *yn, unsigned char s)
 			}
 			break;
 		default:
-			yn->rxstate = YNS_ATTN;
+			break;
 		}
 		yn->rxstate = YNS_ATTN;
 		break;

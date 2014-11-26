@@ -32,7 +32,7 @@ static struct termios saved_state;
 
 static void syntax()
 {
-	printf("ynattach [-cehmLF] [-s SPEED] DEVICE\n");
+	printf("ynattach [-c PROG] [-s SPEED] DEVICE\n");
 }
 
 static void usage()
@@ -40,12 +40,7 @@ static void usage()
 	syntax();
 	printf("Attach network interface to Y-net serial device\n");
 	printf("    -s SPD  Set line speed\n");
-	printf("    -e      Exit after initializing device\n");
-	printf("    -h      Exit when the carrier is lost\n");
 	printf("    -c PROG Run PROG when the line is hung up\n");
-	printf("    -m      Do NOT initialize the line in raw 8 bits mode\n");
-	printf("    -L      Enable 3-wire operation\n");
-	printf("    -F      Disable RTS/CTS flow control\n\n");
 }
 
 struct speed_map {
@@ -154,7 +149,7 @@ static int set_termios_state_or_warn(struct termios *state)
 
 	ret = tcsetattr(handle, TCSANOW, state);
 	if (ret < 0) {
-		fprintf(stderr,"Error setting state");
+		fprintf(stderr,"Error setting state\n");
 		return 1; /* used as exitcode */
 	}
 	return 0;
@@ -231,17 +226,12 @@ int main(int argc, char **argv)
 
 	enum {
 		OPT_s_baud   = 1 << 0,
-		OPT_c_extcmd = 1 << 1,
-		OPT_e_quit   = 1 << 2,
-		OPT_h_watch  = 1 << 3,
-		OPT_m_nonraw = 1 << 4,
-		OPT_L_local  = 1 << 5,
-		OPT_F_noflow = 1 << 6
+		OPT_c_extcmd = 1 << 1
 	};
 
 	/* Parse command line options */
 	opt = 0;
-	while((c = getopt(argc, argv, "s:c:ehmLF")) != -1)
+	while((c = getopt(argc, argv, "s:c:")) != -1)
 	{
 		switch(c)
 		{
@@ -252,21 +242,6 @@ int main(int argc, char **argv)
 		case 'c':
 			opt |= OPT_c_extcmd;
 			extcmd = optarg;
-			break;
-		case 'e':
-			opt |= OPT_e_quit;
-			break;
-		case 'h':
-			opt |= OPT_h_watch;
-			break;
-		case 'm':
-			opt |= OPT_m_nonraw;
-			break;
-		case 'L':
-			opt |= OPT_L_local;
-			break;
-		case 'F':
-			opt |= OPT_F_noflow;
 			break;
 		default:
 			break;
@@ -299,13 +274,10 @@ int main(int argc, char **argv)
 	}
 
 	/* Trap signals in order to restore tty states upon exit */
-	if (!(opt & OPT_e_quit))
-	{
-		signal(SIGHUP,sig_handler);
-		signal(SIGINT,sig_handler);
-		signal(SIGQUIT,sig_handler);
-		signal(SIGTERM,sig_handler);
-	}
+	signal(SIGHUP,sig_handler);
+	signal(SIGINT,sig_handler);
+	signal(SIGQUIT,sig_handler);
+	signal(SIGTERM,sig_handler);
 
 	/* Open tty */
 	handle = open(*argv, O_RDWR | O_NDELAY);
@@ -328,19 +300,15 @@ int main(int argc, char **argv)
 
 	/* Configure tty */
 	memcpy(&state, &saved_state, sizeof(state));
-	if(!(opt & OPT_m_nonraw)) /* raw not suppressed */
-	{
-		memset(&state.c_cc, 0, sizeof(state.c_cc));
-		state.c_cc[VMIN] = 1;
-		state.c_iflag = IGNBRK | IGNPAR;
-		state.c_oflag = 0;
-		state.c_lflag = 0;
-		state.c_cflag = CS8 | HUPCL | CREAD
-		              | ((opt & OPT_L_local) ? CLOCAL : 0)
-		              | ((opt & OPT_F_noflow) ? 0 : CRTSCTS);
-		cfsetispeed(&state, cfgetispeed(&saved_state));
-		cfsetospeed(&state, cfgetospeed(&saved_state));
-	}
+	
+	memset(&state.c_cc, 0, sizeof(state.c_cc));
+	state.c_cc[VMIN] = 1;
+	state.c_iflag = IGNBRK | IGNPAR;
+	state.c_oflag = 0;
+	state.c_lflag = 0;
+	state.c_cflag = CS8 | HUPCL | CREAD | CLOCAL;
+	cfsetispeed(&state, cfgetispeed(&saved_state));
+	cfsetospeed(&state, cfgetospeed(&saved_state));
 
 	if(opt & OPT_s_baud)
 	{
@@ -350,41 +318,12 @@ int main(int argc, char **argv)
 
 	set_state(&state);
 
-	/* Exit now if option -e was passed */
-	if(opt & OPT_e_quit)
-	{
-		return 0;
-	}
-
-	/* If we're not requested to watch, just keep descriptor open
-	 * until we are killed */
-	if(!(opt & OPT_h_watch))
-	{
-		while(1)
-		{
-			sleep(24*60*60);
-		}
-	}
-
 	/* Watch line for hangup */
-	while(1)
+	while(ioctl(handle, TIOCMGET, &i) >= 0 && !(i & TIOCM_CAR))
 	{
-		if(ioctl(handle, TIOCMGET, &i) < 0 || !(i & TIOCM_CAR))
-		{
-			goto no_carrier;
-		}
 		sleep(15);
 	}
 
- no_carrier:
-
-	/* Execute command on hangup */
-	if(opt & OPT_c_extcmd)
-	{
-		system(extcmd);
-	}
-
-	/* Restore states and exit */
-	restore_state_and_exit(EXIT_SUCCESS);
+	return EXIT_SUCCESS;
 }
 
