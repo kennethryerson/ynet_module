@@ -39,7 +39,7 @@
 #include <net/slhc_vj.h>
 #endif
 
-#define YNET_VERSION	"0.3.0"
+#define YNET_VERSION	"0.4.0"
 #define N_YNET 25
 
 static struct net_device *ynet_dev;
@@ -257,87 +257,70 @@ static void yn_bump(struct ynet *yn)
 	struct net_device *dev = yn->dev;
 	struct sk_buff *skb;
 	unsigned char *payload = yn->rbuff;
-	int count, addlen, i;
+	int count, addlen; //, i;
 	unsigned char addtype;
-
-	/* strip off RX packet header */
-	count = yn->rcount;
+	//struct iphdr *ih;
+	//unsigned short id;
 	
 	/* RX and modulation type */
-	payload++;
-	count--;
+	//payload[0];
 	
 	/* Data service type */
-	payload++;
-	count--;
+	//payload[1];
 	
 	/* Modulation rate */
-	payload++;
-	count--;
+	//payload[2];
 	
 	/* Signal quality */
-	payload++;
-	count--;
+	//payload[3];
 	
 	/* TX service */
-	payload++;
-	count--;
+	//payload[4];
 	
 	/* Priority */
-	payload++;
-	count--;
+	//payload[5];
 	
 	/* CW */
-	payload++;
-	count--;
+	//payload[6];
 	
 	/* Repeated */
-	payload++;
-	count--;
+	//payload[7];
 	
 	/* TX result */
-	payload++;
-	count--;
+	//payload[8];
 	
 	/* Net ID */
-	payload++;
-	count--;
-	payload++;
-	count--;
+	//payload[9];
+	//payload[10];
 	
 	/* Source ID */
-	payload++;
-	count--;
-	payload++;
-	count--;
+	//payload[11];
+	//payload[12];
 	
 	/* Target ID */
-	payload++;
-	count--;
-	payload++;
-	count--;
+	//payload[13];
+	//payload[14];
 	
 	/* Origin ID type */
-	addtype = *payload++;
-	count--;
+	addtype = payload[15];
 	
 	/* Origin ID */
 	addlen = addtype*14 + 2;
-	for(i = 0; i < addlen; ++i)
+	/*for(i = 0; i < addlen; ++i)
 	{
-		payload++;
-		count--;
-	}
+		payload[16 + i];
+	}*/
 	
 	/* Final ID */
-	payload++;
-	count--;
-	payload++;
-	count--;
+	//payload[addlen + 16];
+	//payload[addlen + 17];
 	
 	/* Source and target port */
-	payload++;
-	count--;
+	//payload[addlen + 18];
+	
+	/* strip off RX packet header */
+	count = yn->rcount - 19 - addlen;
+	payload += 19 + addlen;
 
 	dev->stats.rx_bytes += count;
 
@@ -354,6 +337,7 @@ static void yn_bump(struct ynet *yn)
 	memcpy(skb_put(skb, count), payload, count);
 	skb_reset_mac_header(skb);
 	skb->protocol = htons(ETH_P_IP);
+	
 	netif_rx(skb);
 	dev->stats.rx_packets++;
 	clear_bit(YNF_DATARX,&yn->flags);
@@ -362,10 +346,6 @@ static void yn_bump(struct ynet *yn)
 static void yn_handle_response(struct ynet *yn)
 {
 	unsigned char *payload = yn->rspbuff;
-	int count;
-	unsigned char status, resp_num, result;
-	
-	count = yn->rspcount;
 	
 	/* check repsonse status */
 	if(payload[0] != YNET_RESPONSE_STATUS_SUCCESS)
@@ -374,46 +354,55 @@ static void yn_handle_response(struct ynet *yn)
 	}
 	
 	/* check TX response */
-	if((yn->rxopcode == YNET_OPCODE_TX_PACKET) && payload[2])
-	{	
-		if(payload[1] == 1)
+	if((yn->rxopcode == YNET_OPCODE_TX_PACKET))
+	{
+		if(payload[1] == 3)
 		{
-			switch(payload[2])
-			{
-			case YNET_RESPONSE_DATA_RESULT1_NO_MEMORY:
-				printk(KERN_ERR "Y-net TX packet rejected: no memory\n");
-				break;
-			case YNET_RESPONSE_DATA_RESULT1_FATAL_ERROR:
-				printk(KERN_ERR "Y-net TX packet rejected: fatal error\n");
-				break;
-			case YNET_RESPONSE_DATA_RESULT1_UNKNOWN_NODE:
-				printk(KERN_ERR "Y-net TX packet rejected: unknown node ID\n");
-				break;
-			default:
-				printk(KERN_ERR "Y-net TX packet rejected: unknown error\n");
-				break;
-			}
+			/* OK to send another packet */
+			yn_unlock(yn);
 		}
-		else if(payload[1] == 3)
+		
+		if(payload[2])
 		{
-			switch(payload[2])
+			if(payload[1] == 1)
 			{
-			case YNET_RESPONSE_DATA_RESULT2_NA:
-				printk(KERN_WARNING "Y-net TX failed: N/A\n");
-				break;
-			case YNET_RESPONSE_DATA_RESULT2_NACK:
-				printk(KERN_WARNING "Y-net TX failed: NACK\n");
-				break;
-			case YNET_RESPONSE_DATA_RESULT2_NO_RESOURCES:
-				printk(KERN_WARNING "Y-net TX failed: no resources (target)\n");
-				break;
-			case YNET_RESPONSE_DATA_RESULT2_BLOCKED:
-				printk(KERN_WARNING "Y-net TX failed: blocked\n");
-				break;
-			case YNET_RESPONSE_DATA_RESULT2_UNKNOWN_ERROR:
-			default:
-				printk(KERN_WARNING "Y-net TX failed: unknown error\n");
-				break;
+				switch(payload[2])
+				{
+				case YNET_RESPONSE_DATA_RESULT1_NO_MEMORY:
+					printk(KERN_ERR "Y-net TX packet rejected: no memory\n");
+					break;
+				case YNET_RESPONSE_DATA_RESULT1_FATAL_ERROR:
+					printk(KERN_ERR "Y-net TX packet rejected: fatal error\n");
+					break;
+				case YNET_RESPONSE_DATA_RESULT1_UNKNOWN_NODE:
+					printk(KERN_ERR "Y-net TX packet rejected: unknown node ID\n");
+					break;
+				default:
+					printk(KERN_ERR "Y-net TX packet rejected: unknown error\n");
+					break;
+				}
+			}
+			else if(payload[1] == 3)
+			{
+				switch(payload[2])
+				{
+				case YNET_RESPONSE_DATA_RESULT2_NA:
+					printk(KERN_WARNING "Y-net TX failed: N/A\n");
+					break;
+				case YNET_RESPONSE_DATA_RESULT2_NACK:
+					printk(KERN_WARNING "Y-net TX failed: NACK\n");
+					break;
+				case YNET_RESPONSE_DATA_RESULT2_NO_RESOURCES:
+					printk(KERN_WARNING "Y-net TX failed: no resources (target)\n");
+					break;
+				case YNET_RESPONSE_DATA_RESULT2_BLOCKED:
+					printk(KERN_WARNING "Y-net TX failed: blocked\n");
+					break;
+				case YNET_RESPONSE_DATA_RESULT2_UNKNOWN_ERROR:
+				default:
+					printk(KERN_WARNING "Y-net TX failed: unknown error\n");
+					break;
+				}
 			}
 		}
 	}
@@ -474,7 +463,8 @@ static void ynet_write_wakeup(struct tty_struct *tty)
 		 * transmission of another packet */
 		yn->dev->stats.tx_packets++;
 		clear_bit(TTY_DO_WRITE_WAKEUP, &tty->flags);
-		yn_unlock(yn);
+		/* Moved unlock to response handler --- do we need to move stats counter? */
+		/* yn_unlock(yn); */
 		return;
 	}
 
@@ -499,9 +489,9 @@ static void yn_tx_timeout(struct net_device *dev)
 		/* Maybe we must check transmitter timeout here ?
 		 *      14 Oct 1994 Dmitry Gorodchanin.
 		 */
-		if(time_before(jiffies, dev_trans_start(dev) + 20 * HZ))
+		if(time_before(jiffies, dev_trans_start(dev) + YNET_TIMEOUT))
 		{
-			/* 20 sec timeout not reached */
+			/* timeout not reached */
 			goto out;
 		}
 		printk(KERN_WARNING "%s: transmit timed out, %s?\n",
@@ -547,7 +537,8 @@ yn_xmit(struct sk_buff *skb, struct net_device *dev)
 	ynet_addr = ntohl(ih->daddr) & 0xFF;
 	ynet_id = ntohs(ih->id);
 	
-	switch(ih->protocol)
+	ynet_ack_service = YNET_PACKET_DATA_NOACK;
+	/*switch(ih->protocol)
 	{
 	case IPPROTO_TCP:
 		ynet_ack_service = YNET_PACKET_DATA_ACK;
@@ -556,10 +547,10 @@ yn_xmit(struct sk_buff *skb, struct net_device *dev)
 		ynet_ack_service = YNET_PACKET_DATA_NOACK;
 		break;
 	default:
-		/* ignore other protocols */
+		/ * ignore other protocols * /
 		dev_kfree_skb(skb);
 		return NETDEV_TX_OK;
-	}
+	}*/
 
 	yn_lock(yn);
 	dev->stats.tx_bytes += skb->len;
@@ -659,7 +650,7 @@ static int yn_init(struct net_device *dev)
 
 	dev->mtu		= yn->mtu;
 	dev->type		= ARPHRD_SLIP;
-	dev->watchdog_timeo	= 20*HZ;
+	dev->watchdog_timeo	= YNET_TIMEOUT;
 	return 0;
 }
 
@@ -942,15 +933,16 @@ static int ynet_hangup(struct tty_struct *tty)
 static int ynet_esc(unsigned char *s, unsigned char *d, int len, unsigned short addr, unsigned short id, unsigned char pts)
 {
 	unsigned char *ptr = d;
+	unsigned char *len_ptr;
 	unsigned char c, chksm = 0;
 	unsigned short ylen = len + 20;
 
 	/* Start Byte */
 	*ptr++ = YNET_ATTENTION;
 	
-	/* Length */
-	chksm += *ptr++ = ylen & 0xFF;
-	chksm += *ptr++ = (ylen >> 8) & 0xFF;
+	/* Length (placeholder) */
+	len_ptr = ptr++;
+	ptr++;
 	
 	/* Type */
 	chksm += *ptr++ = YNET_PACKET_TYPE_REQUEST;
@@ -988,7 +980,7 @@ static int ynet_esc(unsigned char *s, unsigned char *d, int len, unsigned short 
 	chksm += *ptr++ = (addr >> 8) & 0xFF;
 	
 	/* Modulation */
-	chksm += *ptr++ = YNET_PACKET_MODULATION_DCSKT_5;
+	chksm += *ptr++ = YNET_PACKET_MODULATION_AUTO;
 	
 	/* Fragment size */
 	chksm += *ptr++ = 0;
@@ -1004,62 +996,21 @@ static int ynet_esc(unsigned char *s, unsigned char *d, int len, unsigned short 
 	while(len-- > 0)
 	{
 		c = *s++;
+		if(c == YNET_ESC || c == YNET_ATTENTION)
+		{
+			chksm += *ptr++ = YNET_ESC;
+			ylen++;
+		}
 		chksm += *ptr++ = c;
 	}
+	
+	/* Set final length */
+	chksm += *len_ptr++ = ylen & 0xFF;
+	chksm += *len_ptr++ = (ylen >> 8) & 0xFF;
 	
 	/* Checksum */
 	*ptr++ = chksm;
 	return ptr - d;
-}
-
-static void yn_fill_rsp_buffer(struct ynet *yn, unsigned char s)
-{
-	if(!test_bit(YNF_RESP,&yn->flags))
-	{
-		/* Save data byte into incoming response buffer */
-		yn->rspbuff[yn->plidx - 2] = s;
-		
-		yn->plidx++;
-		if(yn->plidx == yn->rxlength)
-		{
-			yn->rxstate = YNS_CHKSUM;
-		}
-	}
-}
-
-static void yn_fill_nl_buffer(struct ynet *yn, unsigned char s)
-{
-	/* ignore NL packets */
-	
-	yn->plidx++;
-	if(yn->plidx == yn->rxlength)
-	{
-		yn->rxstate = YNS_CHKSUM;
-	}
-}
-
-static void yn_fill_rx_buffer(struct ynet *yn, unsigned char s)
-{				
-	if(!test_bit(YNF_DATARX,&yn->flags))
-	{
-		/* Save data byte into incoming RX data buffer */
-		yn->rbuff[yn->plidx - 2] = s;
-		yn->plidx++;
-		
-		if(yn->plidx == yn->rxlength)
-		{
-			yn->rxstate = YNS_CHKSUM;
-		}
-	}
-	else
-	{
-		/* ignore incoming data packet if previous one was not processed */
-		yn->plidx++;
-		if(yn->plidx == yn->rxlength)
-		{
-			yn->rxstate = YNS_CHKSUM;
-		}
-	}
 }
 
 static void ynet_unesc(struct ynet *yn, unsigned char s)
@@ -1081,26 +1032,26 @@ static void ynet_unesc(struct ynet *yn, unsigned char s)
 	case YNS_LENH:
 		yn->rxlength += ((unsigned short)s << 8);
 		yn->rxstate = YNS_TYPE;
-		yn->plidx = 0;
 		yn->checksum += s;
 		break;
 	case YNS_TYPE:
 		yn->rxtype = s;
 		yn->rxstate = YNS_OPCODE;
-		yn->plidx++;
+		yn->rxlength--;
 		yn->checksum += s;
 		break;
 	case YNS_OPCODE:
 		yn->rxopcode = s;
 		yn->rxstate = YNS_PAYLOAD;
-		yn->plidx++;
+		yn->rxlength--;
+		yn->plidx = 0;
 		yn->checksum += s;
 		break;
 	case YNS_PAYLOAD:
 		yn->checksum += s;
 		if(yn->rxlength > yn->plidx)
 		{
-			if((yn->plidx - 2) >= yn->buffsize)
+			if(yn->plidx >= yn->buffsize)
 			{
 				yn->dev->stats.rx_over_errors++;
 				set_bit(YNF_ERROR, &yn->flags);
@@ -1112,23 +1063,47 @@ static void ynet_unesc(struct ynet *yn, unsigned char s)
 			}
 			else
 			{
-				switch(yn->rxtype)
+				if(s == YNET_ESC && !test_and_clear_bit(YNF_ESCAPE, &yn->flags))
 				{
-				case YNET_PACKET_TYPE_RESPONSE:
-					yn_fill_rsp_buffer(yn,s);
-					break;
-				case YNET_PACKET_TYPE_INDICATION:
-					if((yn->rxopcode >> YNET_SERVICE_TYPE_SHIFT) == YNET_SERVICE_TYPE_MANAGEMENT_SA)
+					set_bit(YNF_ESCAPE, &yn->flags);
+					yn->rxlength--;
+				}
+				else if(s == YNET_ATTENTION && !test_and_clear_bit(YNF_ESCAPE, &yn->flags))
+				{
+					printk(KERN_WARNING "Y-net got attention byte in payload\n");
+					yn->rxstate = YNS_LENL;
+					yn->checksum = 0;
+				}
+				else
+				{
+					switch(yn->rxtype)
 					{
-						yn_fill_nl_buffer(yn,s);
+					case YNET_PACKET_TYPE_RESPONSE:
+						if(!test_bit(YNF_RESP,&yn->flags))
+						{
+							/* Save data byte into incoming response buffer */
+							yn->rspbuff[yn->plidx] = s;
+						}
+						break;
+					case YNET_PACKET_TYPE_INDICATION:
+						if(yn->rxopcode == YNET_OPCODE_RX_PACKET)
+						{
+							if(!test_bit(YNF_DATARX,&yn->flags))
+							{
+								/* Save data byte into incoming RX data buffer */
+								yn->rbuff[yn->plidx] = s;
+							}
+						}
+						break;
+					default:
+						yn->rxstate = YNS_ATTN;
 					}
-					else
+					
+					yn->plidx++;
+					if(yn->plidx == yn->rxlength)
 					{
-						yn_fill_rx_buffer(yn,s);
+						yn->rxstate = YNS_CHKSUM;
 					}
-					break;
-				default:
-					yn->rxstate = YNS_ATTN;
 				}
 			}
 		}
@@ -1138,39 +1113,31 @@ static void ynet_unesc(struct ynet *yn, unsigned char s)
 		}
 		break;
 	case YNS_CHKSUM:
-		if(yn->checksum != s)
+		if(yn->checksum == s) /* process only if checksum matches */
 		{
-			/* wrong checksum */
-			yn->rxstate = YNS_ATTN;
-			break;
-		}
-		
-		if(yn->rxopcode == YNET_OPCODE_RESET)
-		{
-			set_bit(YNF_RST,&yn->flags);
-		}
-		
-		switch(yn->rxtype)
-		{
-		case YNET_PACKET_TYPE_RESPONSE:
-			yn->rspcount = yn->rxlength;
-			set_bit(YNF_RESP,&yn->flags);
-			yn_handle_response(yn);
-			break;
-		case YNET_PACKET_TYPE_INDICATION:
-			if((yn->rxopcode >> YNET_SERVICE_TYPE_SHIFT) == YNET_SERVICE_TYPE_MANAGEMENT_SA)
+			if(yn->rxopcode == YNET_OPCODE_RESET)
 			{
-				/* NL indication received - ignore currently */
+				set_bit(YNF_RST,&yn->flags);
 			}
-			else
+		
+			switch(yn->rxtype)
 			{
-				yn->rcount = yn->rxlength;
-				set_bit(YNF_DATARX,&yn->flags);
-				yn_bump(yn);
+			case YNET_PACKET_TYPE_RESPONSE:
+				yn->rspcount = yn->rxlength;
+				set_bit(YNF_RESP,&yn->flags);
+				yn_handle_response(yn);
+				break;
+			case YNET_PACKET_TYPE_INDICATION:
+				if(yn->rxopcode == YNET_OPCODE_RX_PACKET)
+				{
+					yn->rcount = yn->rxlength;
+					set_bit(YNF_DATARX,&yn->flags);
+					yn_bump(yn);
+				}
+				break;
+			default:
+				break;
 			}
-			break;
-		default:
-			break;
 		}
 		yn->rxstate = YNS_ATTN;
 		break;

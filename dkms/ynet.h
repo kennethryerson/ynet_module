@@ -11,9 +11,11 @@
 /* Y-net configuration. */
 #define YN_MTU		1400
 #define YNET_DATA_LEN	1472
+#define YNET_TIMEOUT	(2*HZ)
 
 /* Y-net protocol characters. */
 #define YNET_ATTENTION	0xCA
+#define YNET_ESC        0xDB
 
 /* Y-net packet types */
 #define YNET_PACKET_TYPE_REQUEST    0x00
@@ -174,6 +176,7 @@ struct ynet
 #define YNF_RESP		2			/* Response received flag    */
 #define YNF_DATARX		3			/* Data packet received flag */
 #define YNF_RST			4			/* Reset flag				 */
+#define YNF_ESCAPE      5           /* Escape flag               */
 	
 	unsigned short		rxlength;	/* expected incoming packet length */
 	unsigned short		plidx;		/* current payload receive index */

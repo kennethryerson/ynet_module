@@ -10,7 +10,7 @@ int plc_port = 0;
 
 int plc_open_port(char *port)
 {
-    unsigned int baud = B921600;
+    unsigned int baud = B115200;
     
     /* open IT900 serial port */
     plc_port = open(port, O_RDWR | O_NOCTTY);
