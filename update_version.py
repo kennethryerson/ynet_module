@@ -47,7 +47,7 @@ if __name__=="__main__":
     
     ynet_h_file = open("dkms/ynet.h","w")
     for line in ynet_h_lines:
-        ynet_h_file.write(re.sub("Version:\t@(#)ynet.h\t[0-9\.]+","Version:\t@(#)ynet.h\t{0}".format(version),line))
+        ynet_h_file.write(re.sub("Version:\t@\(#\)ynet.h\t[0-9\.]+","Version:\t@(#)ynet.h\t{0}".format(version),line))
     ynet_h_file.close()
     
     print("Version info written to dkms/ynet.h")
