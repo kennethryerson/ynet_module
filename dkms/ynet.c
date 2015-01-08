@@ -39,7 +39,7 @@
 #include <net/slhc_vj.h>
 #endif
 
-#define YNET_VERSION	"0.4.0"
+#define YNET_VERSION	"0.5.0"
 #define N_YNET 25
 
 static struct net_device *ynet_dev;
@@ -634,6 +634,7 @@ yn_get_stats64(struct net_device *dev, struct rtnl_link_stats64 *stats)
 	stats->tx_errors      = devstats->tx_errors;
 	stats->rx_errors      = devstats->rx_errors;
 	stats->rx_over_errors = devstats->rx_over_errors;
+	stats->rx_length_errors = devstats->rx_length_errors;
 
 	return stats;
 }
@@ -980,7 +981,7 @@ static int ynet_esc(unsigned char *s, unsigned char *d, int len, unsigned short 
 	chksm += *ptr++ = (addr >> 8) & 0xFF;
 	
 	/* Modulation */
-	chksm += *ptr++ = YNET_PACKET_MODULATION_AUTO;
+	chksm += *ptr++ = YNET_PACKET_MODULATION_DCSKT_5;
 	
 	/* Fragment size */
 	chksm += *ptr++ = 0;
@@ -1063,47 +1064,43 @@ static void ynet_unesc(struct ynet *yn, unsigned char s)
 			}
 			else
 			{
-				if(s == YNET_ESC && !test_and_clear_bit(YNF_ESCAPE, &yn->flags))
+				switch(yn->rxtype)
 				{
-					set_bit(YNF_ESCAPE, &yn->flags);
-					yn->rxlength--;
-				}
-				else if(s == YNET_ATTENTION && !test_and_clear_bit(YNF_ESCAPE, &yn->flags))
-				{
-					printk(KERN_WARNING "Y-net got attention byte in payload\n");
-					yn->rxstate = YNS_LENL;
-					yn->checksum = 0;
-				}
-				else
-				{
-					switch(yn->rxtype)
+				case YNET_PACKET_TYPE_RESPONSE:
+					if(!test_bit(YNF_RESP,&yn->flags))
 					{
-					case YNET_PACKET_TYPE_RESPONSE:
-						if(!test_bit(YNF_RESP,&yn->flags))
-						{
-							/* Save data byte into incoming response buffer */
-							yn->rspbuff[yn->plidx] = s;
-						}
-						break;
-					case YNET_PACKET_TYPE_INDICATION:
-						if(yn->rxopcode == YNET_OPCODE_RX_PACKET)
-						{
-							if(!test_bit(YNF_DATARX,&yn->flags))
-							{
-								/* Save data byte into incoming RX data buffer */
-								yn->rbuff[yn->plidx] = s;
-							}
-						}
-						break;
-					default:
-						yn->rxstate = YNS_ATTN;
+						/* Save data byte into incoming response buffer */
+						yn->rspbuff[yn->plidx++] = s;
 					}
-					
-					yn->plidx++;
-					if(yn->plidx == yn->rxlength)
+					break;
+				case YNET_PACKET_TYPE_INDICATION:
+					if(yn->rxopcode == YNET_OPCODE_RX_PACKET)
 					{
-						yn->rxstate = YNS_CHKSUM;
+						if(s == YNET_ESC && !test_and_clear_bit(YNF_ESCAPE, &yn->flags))
+						{
+							set_bit(YNF_ESCAPE, &yn->flags);
+							yn->rxlength--;
+						}
+						else if(s == YNET_ATTENTION && !test_and_clear_bit(YNF_ESCAPE, &yn->flags))
+						{
+							yn->dev->stats.rx_length_errors++;
+							yn->rxstate = YNS_LENL;
+							yn->checksum = 0;
+						}
+						else if(!test_bit(YNF_DATARX,&yn->flags))
+						{
+							/* Save data byte into incoming RX data buffer */
+							yn->rbuff[yn->plidx++] = s;
+						}
 					}
+					break;
+				default:
+					yn->rxstate = YNS_ATTN;
+				}
+				
+				if(yn->plidx == yn->rxlength)
+				{
+					yn->rxstate = YNS_CHKSUM;
 				}
 			}
 		}

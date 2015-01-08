@@ -1,3 +1,9 @@
+ynet (0.5.0) UNRELEASED; urgency=medium
+
+  * Improved handling of dropped bytes in RX packets
+
+ -- Kenneth Ryerson <kryerson@vermeer.com>  Thu, 08 Jan 2015 08:59:49 -0600
+
 ynet (0.4.0) UNRELEASED; urgency=medium
 
   * Delay sending of next packet until current is sent

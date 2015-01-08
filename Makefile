@@ -1,5 +1,5 @@
 MODULE = ynet
-MODVER = 0.4.0
+MODVER = 0.5.0
 DIST = $(MODULE)_$(MODVER).orig.tar.gz
 DESTDIR :=
 
