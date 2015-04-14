@@ -1,7 +1,7 @@
 /*
  * ynet.h	Define the Y-net device driver interface and constants.
  *
- * Version:	@(#)ynet.h	0.5.0
+ * Version:	@(#)ynet.h	0.6.0
  *
  * Author:	Kenneth Ryerson
  */

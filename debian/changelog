@@ -1,3 +1,10 @@
+ynet (0.6.0) UNRELEASED; urgency=medium
+
+  * Fixed 'NOHZ local_softirq_pending 08' warnings
+  * Print modulation on driver init
+
+ -- Kenneth Ryerson <kryerson@vermeer.com>  Tue, 14 Apr 2015 09:42:50 -0600
+
 ynet (0.5.0) UNRELEASED; urgency=medium
 
   * Improved handling of dropped bytes in RX packets

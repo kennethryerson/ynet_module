@@ -39,8 +39,10 @@
 #include <net/slhc_vj.h>
 #endif
 
-#define YNET_VERSION	"0.5.0"
+#define YNET_VERSION	"0.6.0"
 #define N_YNET 25
+
+#define YNET_MODULATION YNET_PACKET_MODULATION_DCSKT_5
 
 static struct net_device *ynet_dev;
 
@@ -338,7 +340,7 @@ static void yn_bump(struct ynet *yn)
 	skb_reset_mac_header(skb);
 	skb->protocol = htons(ETH_P_IP);
 	
-	netif_rx(skb);
+	netif_rx_ni(skb);
 	dev->stats.rx_packets++;
 	clear_bit(YNF_DATARX,&yn->flags);
 }
@@ -981,7 +983,7 @@ static int ynet_esc(unsigned char *s, unsigned char *d, int len, unsigned short 
 	chksm += *ptr++ = (addr >> 8) & 0xFF;
 	
 	/* Modulation */
-	chksm += *ptr++ = YNET_PACKET_MODULATION_DCSKT_5;
+	chksm += *ptr++ = YNET_MODULATION;
 	
 	/* Fragment size */
 	chksm += *ptr++ = 0;
@@ -1217,6 +1219,30 @@ static int __init ynet_init_module(void)
 	int status;
 
 	printk(KERN_INFO "Y-net: version %s.\n",YNET_VERSION);
+	if(YNET_MODULATION < YNET_PACKET_MODULATION_DCSKT_TD1)
+	{
+		printk(KERN_INFO "Y-net: using DCSKT%d modulation.\n",YNET_MODULATION);
+	}
+	else if(YNET_MODULATION <= YNET_PACKET_MODULATION_DCSKT_TD10)
+	{
+		printk(KERN_INFO "Y-net: using DCSKT_TD%d modulation.\n",YNET_MODULATION - YNET_PACKET_MODULATION_DCSKT_12);
+	}
+	else if(YNET_MODULATION == YNET_PACKET_MODULATION_DCSKT_SM)
+	{
+		printk(KERN_INFO "Y-net: using DCSKT_SM modulation.\n");
+	}
+	else if(YNET_MODULATION == YNET_PACKET_MODULATION_DCSKT_RM)
+	{
+		printk(KERN_INFO "Y-net: using DCSKT_RM modulation.\n");
+	}
+	else if(YNET_MODULATION == YNET_PACKET_MODULATION_DCSKT_ERM)
+	{
+		printk(KERN_INFO "Y-net: using DCSKT_ERM modulation.\n");
+	}
+	else if(YNET_MODULATION == YNET_PACKET_MODULATION_AUTO)
+	{
+		printk(KERN_INFO "Y-net: using AUTO modulation.\n");
+	}
 
 	/* Fill in our line protocol discipline, and register it */
 	status = tty_register_ldisc(N_YNET, &ynet_ldisc);

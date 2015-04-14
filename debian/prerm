@@ -1,7 +1,7 @@
 #!/bin/sh
 
 MODNAME=ynet
-MODVER=0.5.0
+MODVER=0.6.0
 
 set -e
 
