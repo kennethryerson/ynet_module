@@ -1,7 +1,7 @@
 /*
  * ynet.h	Define the Y-net device driver interface and constants.
  *
- * Version:	@(#)ynet.h	0.6.0
+ * Version:	@(#)ynet.h	0.7.0
  *
  * Author:	Kenneth Ryerson
  */
@@ -177,6 +177,8 @@ struct ynet
 #define YNF_DATARX		3			/* Data packet received flag */
 #define YNF_RST			4			/* Reset flag				 */
 #define YNF_ESCAPE      5           /* Escape flag               */
+
+	unsigned char		modulation;	/* transmit modulation */
 	
 	unsigned short		rxlength;	/* expected incoming packet length */
 	unsigned short		plidx;		/* current payload receive index */

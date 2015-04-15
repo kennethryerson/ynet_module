@@ -39,14 +39,12 @@
 #include <net/slhc_vj.h>
 #endif
 
-#define YNET_VERSION	"0.6.0"
+#define YNET_VERSION	"0.7.0"
 #define N_YNET 25
-
-#define YNET_MODULATION YNET_PACKET_MODULATION_DCSKT_5
 
 static struct net_device *ynet_dev;
 
-static int ynet_esc(unsigned char *p, unsigned char *d, int len, unsigned short addr, unsigned short id, unsigned char pts);
+static int ynet_esc(unsigned char *p, unsigned char *d, int len, unsigned short addr, unsigned short id, unsigned char pts, unsigned char modulation);
 static void ynet_unesc(struct ynet *yn, unsigned char c);
 
 /********************************
@@ -427,7 +425,7 @@ static void yn_encaps(struct ynet *yn, unsigned char *icp, int len, unsigned sho
 	}
 
 	p = icp;
-	count = ynet_esc(p, (unsigned char *) yn->xbuff, len, addr, id, ack);
+	count = ynet_esc(p, (unsigned char *) yn->xbuff, len, addr, id, ack, yn->modulation);
 
 	/* Order of next two lines is *very* important.
 	 * When we are sending a little amount of data,
@@ -757,6 +755,52 @@ static void yn_sync(void)
 	}
 }
 
+static ssize_t ynet_sysfs_show_modulation(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	struct ynet *yn = netdev_priv(to_net_dev(dev));
+
+	return scnprintf(buf, PAGE_SIZE, "0x%02X\n",yn->modulation);
+}
+
+static ssize_t ynet_sysfs_set_modulation(struct device *dev,
+		struct device_attribute *attr, const char *buf, size_t count)
+{
+	struct net_device *ndev = to_net_dev(dev);
+	struct ynet *yn = netdev_priv(ndev);
+	unsigned long modulation;
+	ssize_t ret;
+	int err;
+
+	rtnl_lock();
+
+	err = strict_strtoul(buf, 0, &modulation);
+	if(err)
+	{
+		ret = err;
+		goto out;
+	}
+
+	yn->modulation = modulation;
+	ret = count;
+
+ out:
+	rtnl_unlock();
+	return ret;
+}
+
+static DEVICE_ATTR(modulation, S_IWUSR | S_IRUGO,
+	ynet_sysfs_show_modulation, ynet_sysfs_set_modulation);
+
+static struct attribute *ynet_sysfs_attrs[] = {
+	&dev_attr_modulation.attr,
+	NULL,
+};
+
+static struct attribute_group ynet_sysfs_attr_group = {
+	.attrs = ynet_sysfs_attrs,
+};
+
 /* Check for free Y-net channel, and link in this `tty' line. */
 static struct ynet *yn_alloc(dev_t line)
 {
@@ -789,11 +833,15 @@ static struct ynet *yn_alloc(dev_t line)
 		dev->base_addr  = i;
 	}
 
+	/* set sysfs attribute group */
+	dev->sysfs_groups[0] = &ynet_sysfs_attr_group;
+
 	yn = netdev_priv(dev);
 
 	/* Initialize channel control data */
 	yn->magic       = YNET_MAGIC;
 	yn->dev	      	= dev;
+	yn->modulation  = YNET_PACKET_MODULATION_DCSKT_5;
 	spin_lock_init(&yn->lock);
 	ynet_dev = dev;
 	return yn;
@@ -933,7 +981,7 @@ static int ynet_hangup(struct tty_struct *tty)
  *			STANDARD Y-net ENCAPSULATION		  	 *
  *****************************************************/
 
-static int ynet_esc(unsigned char *s, unsigned char *d, int len, unsigned short addr, unsigned short id, unsigned char pts)
+static int ynet_esc(unsigned char *s, unsigned char *d, int len, unsigned short addr, unsigned short id, unsigned char pts, unsigned char modulation)
 {
 	unsigned char *ptr = d;
 	unsigned char *len_ptr;
@@ -983,7 +1031,7 @@ static int ynet_esc(unsigned char *s, unsigned char *d, int len, unsigned short 
 	chksm += *ptr++ = (addr >> 8) & 0xFF;
 	
 	/* Modulation */
-	chksm += *ptr++ = YNET_MODULATION;
+	chksm += *ptr++ = modulation;
 	
 	/* Fragment size */
 	chksm += *ptr++ = 0;
@@ -1219,30 +1267,6 @@ static int __init ynet_init_module(void)
 	int status;
 
 	printk(KERN_INFO "Y-net: version %s.\n",YNET_VERSION);
-	if(YNET_MODULATION < YNET_PACKET_MODULATION_DCSKT_TD1)
-	{
-		printk(KERN_INFO "Y-net: using DCSKT%d modulation.\n",YNET_MODULATION);
-	}
-	else if(YNET_MODULATION <= YNET_PACKET_MODULATION_DCSKT_TD10)
-	{
-		printk(KERN_INFO "Y-net: using DCSKT_TD%d modulation.\n",YNET_MODULATION - YNET_PACKET_MODULATION_DCSKT_12);
-	}
-	else if(YNET_MODULATION == YNET_PACKET_MODULATION_DCSKT_SM)
-	{
-		printk(KERN_INFO "Y-net: using DCSKT_SM modulation.\n");
-	}
-	else if(YNET_MODULATION == YNET_PACKET_MODULATION_DCSKT_RM)
-	{
-		printk(KERN_INFO "Y-net: using DCSKT_RM modulation.\n");
-	}
-	else if(YNET_MODULATION == YNET_PACKET_MODULATION_DCSKT_ERM)
-	{
-		printk(KERN_INFO "Y-net: using DCSKT_ERM modulation.\n");
-	}
-	else if(YNET_MODULATION == YNET_PACKET_MODULATION_AUTO)
-	{
-		printk(KERN_INFO "Y-net: using AUTO modulation.\n");
-	}
 
 	/* Fill in our line protocol discipline, and register it */
 	status = tty_register_ldisc(N_YNET, &ynet_ldisc);
