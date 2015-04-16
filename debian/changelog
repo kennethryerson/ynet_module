@@ -1,3 +1,10 @@
+ynet (0.8.0) UNRELEASED; urgency=medium
+
+  * Updated stats counters
+  * Added stats reset attribute
+
+ -- Kenneth Ryerson <kryerson@vermeer.com>  Thu, 16 Apr 2015 11:20:03 -0600
+
 ynet (0.7.0) UNRELEASED; urgency=medium
 
   * Added sysfs attribute to control modulation

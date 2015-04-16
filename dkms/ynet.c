@@ -39,7 +39,7 @@
 #include <net/slhc_vj.h>
 #endif
 
-#define YNET_VERSION	"0.7.0"
+#define YNET_VERSION	"0.8.0"
 #define N_YNET 25
 
 static struct net_device *ynet_dev;
@@ -499,6 +499,7 @@ static void yn_tx_timeout(struct net_device *dev)
 			(tty_chars_in_buffer(yn->tty) || yn->xleft) ?
 				"bad line quality" : "driver error");
 		yn->xleft = 0;
+		yn->dev->stats.tx_errors++;
 		clear_bit(TTY_DO_WRITE_WAKEUP, &yn->tty->flags);
 		yn_unlock(yn);
 	}
@@ -624,17 +625,35 @@ static struct rtnl_link_stats64 *
 yn_get_stats64(struct net_device *dev, struct rtnl_link_stats64 *stats)
 {
 	struct net_device_stats *devstats = &dev->stats;
-	unsigned long c_rx_dropped = 0;
-	stats->rx_packets     = devstats->rx_packets;
-	stats->tx_packets     = devstats->tx_packets;
-	stats->rx_bytes       = devstats->rx_bytes;
-	stats->tx_bytes       = devstats->tx_bytes;
-	stats->rx_dropped     = devstats->rx_dropped + c_rx_dropped;
-	stats->tx_dropped     = devstats->tx_dropped;
-	stats->tx_errors      = devstats->tx_errors;
-	stats->rx_errors      = devstats->rx_errors;
-	stats->rx_over_errors = devstats->rx_over_errors;
-	stats->rx_length_errors = devstats->rx_length_errors;
+	stats->rx_packets = devstats->rx_packets;	/* total packets received		*/
+	stats->tx_packets = devstats->tx_packets;	/* total packets transmitted	*/
+	stats->rx_bytes   = devstats->rx_bytes;		/* total bytes received 		*/
+	stats->tx_bytes   = devstats->tx_bytes;		/* total bytes transmitted		*/
+	stats->rx_dropped = devstats->rx_dropped;	/* no space in linux buffers	*/
+	stats->tx_dropped = devstats->tx_dropped;	/* no space available in linux	*/
+	stats->tx_errors  = devstats->tx_errors;	/* packet transmit problems		*/
+	stats->rx_errors  = devstats->rx_errors;	/* bad packets received			*/
+	stats->multicast  = devstats->multicast;	/* multicast packets received	*/
+	stats->collisions = devstats->collisions;
+	
+	/* detailed rx_errors */
+	stats->rx_length_errors = devstats->rx_length_errors;	/* invalid packet length		*/
+	stats->rx_over_errors   = devstats->rx_over_errors;		/* receiver ring buff overflow	*/
+	stats->rx_crc_errors    = devstats->rx_crc_errors;		/* recved pkt with crc error	*/
+	stats->rx_frame_errors  = devstats->rx_frame_errors;	/* recv'd frame alignment error */
+	stats->rx_fifo_errors   = devstats->rx_fifo_errors;		/* recv'r fifo overrun			*/
+	stats->rx_missed_errors = devstats->rx_missed_errors;	/* receiver missed packet		*/
+
+	/* detailed tx_errors */
+	stats->tx_aborted_errors   = devstats->tx_aborted_errors;
+	stats->tx_carrier_errors   = devstats->tx_carrier_errors;
+	stats->tx_fifo_errors      = devstats->tx_fifo_errors;
+	stats->tx_heartbeat_errors = devstats->tx_heartbeat_errors;
+	stats->tx_window_errors    = devstats->tx_window_errors;
+
+	/* for cslip etc */
+	stats->rx_compressed = devstats->rx_compressed;
+	stats->tx_compressed = devstats->rx_compressed;
 
 	return stats;
 }
@@ -789,11 +808,49 @@ static ssize_t ynet_sysfs_set_modulation(struct device *dev,
 	return ret;
 }
 
+static ssize_t ynet_sysfs_show_stats_reset(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	return scnprintf(buf, PAGE_SIZE, "0\n");
+}
+
+static ssize_t ynet_sysfs_set_stats_reset(struct device *dev,
+		struct device_attribute *attr, const char *buf, size_t count)
+{
+	struct net_device *ndev = to_net_dev(dev);
+	unsigned long reset;
+	ssize_t ret;
+	int err;
+
+	rtnl_lock();
+
+	err = strict_strtoul(buf, 0, &reset);
+	if(err)
+	{
+		ret = err;
+		goto out;
+	}
+
+	if(reset)
+	{
+		memset(&ndev->stats, 0, sizeof(ndev->stats));
+	}
+	ret = count;
+
+ out:
+	rtnl_unlock();
+	return ret;
+}
+
 static DEVICE_ATTR(modulation, S_IWUSR | S_IRUGO,
 	ynet_sysfs_show_modulation, ynet_sysfs_set_modulation);
 
+static DEVICE_ATTR(stats_reset, S_IWUSR | S_IRUGO,
+	ynet_sysfs_show_stats_reset, ynet_sysfs_set_stats_reset);
+
 static struct attribute *ynet_sysfs_attrs[] = {
 	&dev_attr_modulation.attr,
+	&dev_attr_stats_reset.attr,
 	NULL,
 };
 
@@ -1074,6 +1131,10 @@ static void ynet_unesc(struct ynet *yn, unsigned char s)
 			yn->rxstate = YNS_LENL;
 			yn->checksum = 0;
 		}
+		else
+		{
+			yn->dev->stats.rx_frame_errors++;
+		}
 		break;
 	case YNS_LENL:
 		yn->rxlength = s;
@@ -1185,6 +1246,11 @@ static void ynet_unesc(struct ynet *yn, unsigned char s)
 			default:
 				break;
 			}
+		}
+		else
+		{
+			/* checksum error */
+			yn->dev->stats.rx_crc_errors++;
 		}
 		yn->rxstate = YNS_ATTN;
 		break;
