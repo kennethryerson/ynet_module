@@ -39,7 +39,7 @@
 #include <net/slhc_vj.h>
 #endif
 
-#define YNET_VERSION	"0.8.0"
+#define YNET_VERSION	"0.9.0"
 #define N_YNET 25
 
 static struct net_device *ynet_dev;
@@ -273,6 +273,10 @@ static void yn_bump(struct ynet *yn)
 	
 	/* Signal quality */
 	//payload[3];
+	if(test_bit(YNF_SQ, &yn->flags))
+	{
+		printk(KERN_INFO "Received packet with SQ = 0x%02X\n", payload[3]);
+	}
 	
 	/* TX service */
 	//payload[4];
@@ -791,7 +795,10 @@ static ssize_t ynet_sysfs_set_modulation(struct device *dev,
 	ssize_t ret;
 	int err;
 
-	rtnl_lock();
+	if(!rtnl_trylock())
+	{
+		return restart_syscall();
+	}
 
 	err = strict_strtoul(buf, 0, &modulation);
 	if(err)
@@ -822,7 +829,10 @@ static ssize_t ynet_sysfs_set_stats_reset(struct device *dev,
 	ssize_t ret;
 	int err;
 
-	rtnl_lock();
+	if(!rtnl_trylock())
+	{
+		return restart_syscall();
+	}
 
 	err = strict_strtoul(buf, 0, &reset);
 	if(err)
@@ -842,15 +852,74 @@ static ssize_t ynet_sysfs_set_stats_reset(struct device *dev,
 	return ret;
 }
 
+static ssize_t ynet_sysfs_show_enable_sq(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	struct net_device *ndev = to_net_dev(dev);
+	struct ynet *yn = netdev_priv(ndev);
+	ssize_t n = 0;
+	
+	if(test_bit(YNF_SQ, &yn->flags))
+	{
+		n = scnprintf(buf, PAGE_SIZE, "1\n");
+	}
+	else
+	{
+		n = scnprintf(buf, PAGE_SIZE, "0\n");
+	}
+	
+	return n;
+}
+
+static ssize_t ynet_sysfs_set_enable_sq(struct device *dev,
+		struct device_attribute *attr, const char *buf, size_t count)
+{
+	struct net_device *ndev = to_net_dev(dev);
+	struct ynet *yn = netdev_priv(ndev);
+	unsigned long sq;
+	ssize_t ret;
+	int err;
+
+	if(!rtnl_trylock())
+	{
+		return restart_syscall();
+	}
+
+	err = strict_strtoul(buf, 0, &sq);
+	if(err)
+	{
+		ret = err;
+		goto out;
+	}
+
+	if(sq)
+	{
+		set_bit(YNF_SQ, &yn->flags);
+	}
+	else
+	{
+		clear_bit(YNF_SQ, &yn->flags);
+	}
+	ret = count;
+
+ out:
+	rtnl_unlock();
+	return ret;
+}
+
 static DEVICE_ATTR(modulation, S_IWUSR | S_IRUGO,
 	ynet_sysfs_show_modulation, ynet_sysfs_set_modulation);
 
 static DEVICE_ATTR(stats_reset, S_IWUSR | S_IRUGO,
 	ynet_sysfs_show_stats_reset, ynet_sysfs_set_stats_reset);
 
+static DEVICE_ATTR(enable_sq, S_IWUSR | S_IRUGO,
+	ynet_sysfs_show_enable_sq, ynet_sysfs_set_enable_sq);
+
 static struct attribute *ynet_sysfs_attrs[] = {
 	&dev_attr_modulation.attr,
 	&dev_attr_stats_reset.attr,
+	&dev_attr_enable_sq.attr,
 	NULL,
 };
 
