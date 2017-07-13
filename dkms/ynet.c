@@ -813,7 +813,7 @@ static ssize_t ynet_sysfs_set_modulation(struct device *dev,
 		return restart_syscall();
 	}
 
-	err = strict_strtoul(buf, 0, &modulation);
+	err = kstrtoul(buf, 0, &modulation);
 	if(err)
 	{
 		ret = err;
@@ -847,7 +847,7 @@ static ssize_t ynet_sysfs_set_stats_reset(struct device *dev,
 		return restart_syscall();
 	}
 
-	err = strict_strtoul(buf, 0, &reset);
+	err = kstrtoul(buf, 0, &reset);
 	if(err)
 	{
 		ret = err;
@@ -898,7 +898,7 @@ static ssize_t ynet_sysfs_set_enable_sq(struct device *dev,
 		return restart_syscall();
 	}
 
-	err = strict_strtoul(buf, 0, &sq);
+	err = kstrtoul(buf, 0, &sq);
 	if(err)
 	{
 		ret = err;
