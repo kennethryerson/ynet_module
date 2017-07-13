@@ -146,6 +146,7 @@ struct ynet
 	struct tty_struct	*tty;		/* ptr to TTY structure		*/
 	struct net_device	*dev;		/* easy for intr handling	*/
 	spinlock_t			lock;
+    struct work_struct	tx_work;	/* Flushes transmit buffer	*/
 
 	/* These are pointers to the malloc()ed frame buffers. */
 	unsigned char		*rbuff;		/* receiver buffer */

@@ -31,6 +31,7 @@
 #include <linux/delay.h>
 #include <linux/init.h>
 #include <linux/slab.h>
+#include <linux/workqueue.h>
 #include "ynet.h"
 #ifdef CONFIG_INET
 #include <linux/ip.h>
@@ -446,18 +447,17 @@ static void yn_encaps(struct ynet *yn, unsigned char *icp, int len, unsigned sho
 	yn->xhead = yn->xbuff + actual;
 }
 
-/*
- * Called by the driver when there's room for more data.  If we have
- * more packets to send, we send them here.
- */
-static void ynet_write_wakeup(struct tty_struct *tty)
+/* Write out any remaining transmit buffer. Scheduled when tty is writable */
+static void ynet_transmit(struct work_struct *work)
 {
+    struct ynet *yn = container_of(work, struct ynet, tx_work);
 	int actual;
-	struct ynet *yn = tty->disc_data;
 
+    spin_lock_bh(&yn->lock);
 	/* First make sure we're connected. */
-	if(!yn || yn->magic != YNET_MAGIC || !netif_running(yn->dev))
+	if(!yn->tty || yn->magic != YNET_MAGIC || !netif_running(yn->dev))
 	{
+        spin_unlock_bh(&yn->lock);
 		return;
 	}
 
@@ -466,15 +466,28 @@ static void ynet_write_wakeup(struct tty_struct *tty)
 		/* Now serial buffer is almost free & we can start
 		 * transmission of another packet */
 		yn->dev->stats.tx_packets++;
-		clear_bit(TTY_DO_WRITE_WAKEUP, &tty->flags);
+		clear_bit(TTY_DO_WRITE_WAKEUP, &yn->tty->flags);
+        spin_unlock_bh(&yn->lock);
 		/* Moved unlock to response handler --- do we need to move stats counter? */
 		/* yn_unlock(yn); */
 		return;
 	}
 
-	actual = tty->ops->write(tty, yn->xhead, yn->xleft);
+	actual = yn->tty->ops->write(yn->tty, yn->xhead, yn->xleft);
 	yn->xleft -= actual;
 	yn->xhead += actual;
+    spin_unlock_bh(&yn->lock);
+}
+
+/*
+ * Called by the driver when there's room for more data.
+ * Schedule the transmit.
+ */
+static void ynet_write_wakeup(struct tty_struct *tty)
+{
+    struct ynet *yn = tty->disc_data;
+
+	schedule_work(&yn->tx_work);
 }
 
 static void yn_tx_timeout(struct net_device *dev)
@@ -951,7 +964,7 @@ static struct ynet *yn_alloc(dev_t line)
 		char name[IFNAMSIZ];
 		sprintf(name, "yn%d", i);
 
-		dev = alloc_netdev(sizeof(*yn), name, yn_setup);
+		dev = alloc_netdev(sizeof(*yn), name, NET_NAME_UNKNOWN, yn_setup);
 		if(!dev)
 		{
 			return NULL;
@@ -969,6 +982,7 @@ static struct ynet *yn_alloc(dev_t line)
 	yn->dev	      	= dev;
 	yn->modulation  = YNET_PACKET_MODULATION_DCSKT_5;
 	spin_lock_init(&yn->lock);
+    INIT_WORK(&yn->tx_work, ynet_transmit);
 	ynet_dev = dev;
 	return yn;
 }
@@ -1085,12 +1099,16 @@ static void ynet_close(struct tty_struct *tty)
 		return;
 	}
 
+    spin_lock_bh(&yn->lock);
 	tty->disc_data = NULL;
 	yn->tty = NULL;
 	if(!yn->leased)
 	{
 		yn->line = 0;
 	}
+    spin_unlock_bh(&yn->lock);
+
+	flush_work(&yn->tx_work);
 
 	/* Flush network side */
 	unregister_netdev(yn->dev);
