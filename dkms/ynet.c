@@ -12,7 +12,7 @@
 #include <linux/module.h>
 #include <linux/moduleparam.h>
 
-#include <asm/uaccess.h>
+#include <linux/uaccess.h>
 #include <linux/bitops.h>
 #include <linux/sched.h>
 #include <linux/string.h>
@@ -442,7 +442,7 @@ static void yn_encaps(struct ynet *yn, unsigned char *icp, int len, unsigned sho
 	 */
 	set_bit(TTY_DO_WRITE_WAKEUP, &yn->tty->flags);
 	actual = yn->tty->ops->write(yn->tty, yn->xbuff, count);
-	yn->dev->trans_start = jiffies;
+	netif_trans_update(yn->dev);
 	yn->xleft = count - actual;
 	yn->xhead = yn->xbuff + actual;
 }
@@ -624,16 +624,7 @@ static int yn_change_mtu(struct net_device *dev, int new_mtu)
 {
 	struct ynet *yn = netdev_priv(dev);
 
-	if(new_mtu < 68 || new_mtu > YNET_DATA_LEN)
-	{
-		return -EINVAL;
-	}
-
-	if(new_mtu != dev->mtu)
-	{
-		return yn_realloc_bufs(yn, new_mtu);
-	}
-	return 0;
+	return yn_realloc_bufs(yn, new_mtu);
 }
 
 /* Netdevice get statistics request */
@@ -726,6 +717,10 @@ static void yn_setup(struct net_device *dev)
 	dev->hard_header_len	= 0;
 	dev->addr_len		= 0;
 	dev->tx_queue_len	= 10;
+    
+    /* MTU range: 68 - YNET_DATA_LEN */
+    dev->min_mtu = 68;
+    dev->max_mtu = YNET_DATA_LEN;
 
 	/* New-style flags. */
 	dev->flags		= IFF_NOARP|IFF_POINTOPOINT|IFF_MULTICAST;
